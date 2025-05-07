@@ -40,7 +40,7 @@ const Login: React.FC = () => {
       // Register the user with our backend using the new endpoint
       try {
         console.log("Calling register-initial API endpoint");
-        const response = await fetch('http://localhost:5000/api/auth/register-initial', {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/register-initial`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
