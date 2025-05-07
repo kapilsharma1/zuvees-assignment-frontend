@@ -16,7 +16,7 @@ const AdminRiders: React.FC = () => {
   const [riders, setRiders] = useState<RiderWithOrders[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [orderLoading, setOrderLoading] = useState<string | null>(null);
+  const [orderLoading] = useState<string | null>(null);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
 
   useEffect(() => {

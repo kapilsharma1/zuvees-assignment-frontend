@@ -43,10 +43,10 @@ const ProductDetail: React.FC = () => {
   const sizes = product ? Array.from(new Set(product.variants.map(v => v.size))) : [];
 
   // Find available variants based on selected color and size
-  const availableVariants = product?.variants.filter(v => 
-    (!selectedColor || v.color === selectedColor) &&
-    (!selectedSize || v.size === selectedSize)
-  ) || [];
+  // const availableVariants = product?.variants.filter(v => 
+  //   (!selectedColor || v.color === selectedColor) &&
+  //   (!selectedSize || v.size === selectedSize)
+  // ) || [];
 
   // Update selected variant when color or size changes
   useEffect(() => {

@@ -48,19 +48,19 @@ const AdminDashboard: React.FC = () => {
     fetchData();
   }, [user, navigate]);
 
-  const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
-    try {
-      await api.patch(`/orders/${orderId}`, { status: newStatus });
-      setOrders((prevOrders) =>
-        prevOrders.map((order) =>
-          order._id === orderId ? { ...order, status: newStatus } : order
-        )
-      );
-    } catch (error: any) {
-      console.error('Error updating order status:', error);
-      setError(error.response?.data?.message || 'Error updating order status');
-    }
-  };
+  // const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
+  //   try {
+  //     await api.patch(`/orders/${orderId}`, { status: newStatus });
+  //     setOrders((prevOrders) =>
+  //       prevOrders.map((order) =>
+  //         order._id === orderId ? { ...order, status: newStatus } : order
+  //       )
+  //     );
+  //   } catch (error: any) {
+  //     console.error('Error updating order status:', error);
+  //     setError(error.response?.data?.message || 'Error updating order status');
+  //   }
+  // };
 
   const handleAssignRider = async () => {
     if (!selectedOrder || !selectedRider) return;
