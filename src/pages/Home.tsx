@@ -67,7 +67,7 @@ const Home: React.FC = () => {
         <div className="mt-6 grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
           {featuredProducts.map((product) => (
             <div key={product._id} className="group relative">
-              <div className="w-full min-h-80 bg-gray-200 aspect-w-1 aspect-h-1 rounded-md overflow-hidden group-hover:opacity-75">
+              <div className="w-full min-h-80 bg-white aspect-w-1 aspect-h-1 rounded-md overflow-hidden group-hover:opacity-75">
                 <img
                   src={product.images[0]}
                   alt={product.name}

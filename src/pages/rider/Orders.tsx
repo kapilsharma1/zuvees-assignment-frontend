@@ -13,6 +13,28 @@ const statusColors = {
   cancelled: 'bg-gray-100 text-gray-800',
 };
 
+interface PendingUpdate {
+  id?: number;
+  orderId: string;
+  status: Order['status'];
+  timestamp: string;
+}
+
+interface CustomIDBDatabase extends IDBDatabase {
+  add(storeName: string, data: any): Promise<number>;
+  delete(storeName: string, key: number): Promise<void>;
+  getAll(storeName: string): Promise<PendingUpdate[]>;
+}
+
+const statusOptions: Record<Order['status'], string> = {
+  pending: 'Pending',
+  paid: 'Paid',
+  shipped: 'Shipped',
+  delivered: 'Delivered',
+  undelivered: 'Undelivered',
+  cancelled: 'Cancelled'
+};
+
 const RiderOrders: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -44,17 +66,77 @@ const RiderOrders: React.FC = () => {
 
   const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
     try {
-      await api.patch(`/orders/${orderId}`, { status: newStatus });
-      setOrders((prevOrders) =>
-        prevOrders.map((order) =>
-          order._id === orderId ? { ...order, status: newStatus } : order
-        )
-      );
-      setSelectedOrder(null);
-    } catch (error: any) {
+      // Store the update in IndexedDB first
+      const db = await openDB() as unknown as CustomIDBDatabase;
+      const store = db.transaction('pendingUpdates', 'readwrite').objectStore('pendingUpdates');
+      await store.add({
+        orderId,
+        status: newStatus,
+        timestamp: new Date().toISOString()
+      });
+
+      // Try to update the server
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) {
+        // If offline, register for background sync
+        if (!navigator.onLine) {
+          if ('serviceWorker' in navigator && 'SyncManager' in window) {
+            const registration = await navigator.serviceWorker.ready;
+            await (registration as any).sync.register('order-status-update');
+          }
+          // Update local state optimistically
+          setOrders(prevOrders => prevOrders.map(order => 
+            order._id === orderId ? { ...order, status: newStatus } : order
+          ));
+          return;
+        }
+        throw new Error('Failed to update order status');
+      }
+
+      // If online and update successful, remove from IndexedDB
+      const deleteStore = db.transaction('pendingUpdates', 'readwrite').objectStore('pendingUpdates');
+      await deleteStore.delete(orderId);
+      
+      // Update local state
+      setOrders(prevOrders => prevOrders.map(order => 
+        order._id === orderId ? { ...order, status: newStatus } : order
+      ));
+    } catch (error) {
       console.error('Error updating order status:', error);
-      setError(error.response?.data?.message || 'Error updating order status');
+      // If offline, the update will be synced when back online
+      if (!navigator.onLine) {
+        setOrders(prevOrders => prevOrders.map(order => 
+          order._id === orderId ? { ...order, status: newStatus } : order
+        ));
+      } else {
+        setError('Failed to update order status. Please try again.');
+      }
     }
+  };
+
+  // Add IndexedDB helper function
+  const openDB = () => {
+    return new Promise<CustomIDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('zuveesDB', 1);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result as unknown as CustomIDBDatabase);
+      
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains('pendingUpdates')) {
+          db.createObjectStore('pendingUpdates', { keyPath: 'id', autoIncrement: true });
+        }
+      };
+    });
   };
 
   if (loading) {
@@ -198,14 +280,14 @@ const RiderOrders: React.FC = () => {
                 <div className="mt-1">
                   <select
                     value={selectedOrder.status}
-                    onChange={(e) =>
-                      handleStatusChange(selectedOrder._id, e.target.value as Order['status'])
-                    }
+                    onChange={(e) => handleStatusChange(selectedOrder._id, e.target.value as Order['status'])}
                     className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
                   >
-                    <option value="shipped">Shipped</option>
-                    <option value="delivered">Delivered</option>
-                    <option value="undelivered">Undelivered</option>
+                    {Object.entries(statusOptions).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               ) : (

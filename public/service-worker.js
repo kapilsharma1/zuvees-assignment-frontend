@@ -1,25 +1,22 @@
 // This is the service worker with the Cache-first network
 
-const CACHE = "precache";
-const precacheFiles = [
-  "/",
-  "/index.html",
-  "/static/js/main.chunk.js",
-  "/static/js/0.chunk.js",
-  "/static/js/bundle.js",
-  "/manifest.json",
-  "/favicon.ico",
-  "/logo192.png",
-  "/logo512.png"
+const CACHE_NAME = 'zuvees-cache-v1';
+const OFFLINE_URL = '/offline.html';
+
+const urlsToCache = [
+  '/',
+  '/offline.html',
+  '/index.html',
+  '/manifest.json',
+  '/static/js/main.chunk.js',
+  '/static/js/0.chunk.js',
+  '/static/js/bundle.js',
 ];
 
-self.addEventListener("install", function (event) {
-  console.log("[PWA Builder] Install Event processing");
-
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then(function (cache) {
-      console.log("[PWA Builder] Cached offline page during install");
-      return cache.addAll(precacheFiles);
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(urlsToCache);
     })
   );
 });
@@ -32,43 +29,84 @@ self.addEventListener("activate", function (event) {
 
 // If any fetch fails, it will look for the request in the cache
 // and will return the cached response
-self.addEventListener("fetch", function (event) {
-  if (event.request.method !== "GET") return;
-
-  event.respondWith(
-    fetch(event.request)
-      .then(function (response) {
-        console.log("[PWA Builder] add page to offline cache: " + response.url);
-
-        // If request was successful, add or update it in the cache
-        event.waitUntil(updateCache(event.request, response.clone()));
-
-        return response;
-      })
-      .catch(function (error) {
-        console.log("[PWA Builder] Network request Failed. Serving content from cache: " + error);
-        return fromCache(event.request);
-      })
-  );
+self.addEventListener('fetch', (event) => {
+  if (event.request.method === 'GET') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          // Cache the response for future use
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
+          return response;
+        })
+        .catch(() => {
+          // If offline, try to serve from cache
+          return caches.match(event.request).then((response) => {
+            if (response) {
+              return response;
+            }
+            // If not in cache and offline, show offline page
+            if (event.request.mode === 'navigate') {
+              return caches.match(OFFLINE_URL);
+            }
+            return new Response('Offline', {
+              status: 503,
+              statusText: 'Service Unavailable',
+              headers: new Headers({
+                'Content-Type': 'text/plain',
+              }),
+            });
+          });
+        })
+    );
+  }
 });
 
-function fromCache(request) {
-  // Check to see if you have it in the cache
-  // Return response
-  // If not in the cache, then return the offline page
-  return caches.open(CACHE).then(function (cache) {
-    return cache.match(request).then(function (matching) {
-      if (!matching || matching.status === 404) {
-        return Promise.reject("no-match");
-      }
+// Handle background sync for order status updates
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'order-status-update') {
+    event.waitUntil(syncOrderStatus());
+  }
+});
 
-      return matching;
-    });
-  });
+async function syncOrderStatus() {
+  const db = await openDB();
+  const pendingUpdates = await db.getAll('pendingUpdates');
+  
+  for (const update of pendingUpdates) {
+    try {
+      const response = await fetch(`/api/orders/${update.orderId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: update.status }),
+      });
+      
+      if (response.ok) {
+        await db.delete('pendingUpdates', update.id);
+      }
+    } catch (error) {
+      console.error('Error syncing order status:', error);
+    }
+  }
 }
 
-function updateCache(request, response) {
-  return caches.open(CACHE).then(function (cache) {
-    return cache.put(request, response);
+// IndexedDB setup
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('zuveesDB', 1);
+    
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('pendingUpdates')) {
+        db.createObjectStore('pendingUpdates', { keyPath: 'id', autoIncrement: true });
+      }
+    };
   });
 } 

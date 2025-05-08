@@ -106,7 +106,7 @@ const Products: React.FC = () => {
             </div>
             <div className="mt-2">
               <div className="flex space-x-2">
-                {product.variants.map((variant) => (
+                {product.variants.slice(0, 2).map((variant) => (
                   <span
                     key={variant.sku}
                     className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
@@ -114,6 +114,11 @@ const Products: React.FC = () => {
                     {variant.color} / {variant.size}
                   </span>
                 ))}
+                {product.variants.length > 2 && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    +{product.variants.length - 2} more
+                  </span>
+                )}
               </div>
             </div>
           </div>
