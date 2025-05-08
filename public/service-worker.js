@@ -77,16 +77,29 @@ async function syncOrderStatus() {
   
   for (const update of pendingUpdates) {
     try {
-      const response = await fetch(`/api/orders/${update.orderId}`, {
+      // Get the current token from IndexedDB
+      const tokenStore = db.transaction('auth', 'readonly').objectStore('auth');
+      const tokenData = await tokenStore.get('token');
+      
+      if (!tokenData) {
+        console.error('No auth token found for sync');
+        continue;
+      }
+
+      const response = await fetch(`${self.registration.scope}api/orders/${update.orderId}/delivery-status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokenData.token}`
         },
-        body: JSON.stringify({ status: update.status }),
+        body: JSON.stringify({ status: update.status })
       });
       
       if (response.ok) {
         await db.delete('pendingUpdates', update.id);
+        console.log('Successfully synced order status:', update.orderId);
+      } else {
+        console.error('Failed to sync order status:', update.orderId, await response.text());
       }
     } catch (error) {
       console.error('Error syncing order status:', error);
@@ -106,6 +119,9 @@ function openDB() {
       const db = event.target.result;
       if (!db.objectStoreNames.contains('pendingUpdates')) {
         db.createObjectStore('pendingUpdates', { keyPath: 'id', autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains('auth')) {
+        db.createObjectStore('auth', { keyPath: 'id' });
       }
     };
   });

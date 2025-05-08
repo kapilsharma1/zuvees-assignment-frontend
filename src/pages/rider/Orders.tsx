@@ -26,13 +26,12 @@ interface CustomIDBDatabase extends IDBDatabase {
   getAll(storeName: string): Promise<PendingUpdate[]>;
 }
 
-const statusOptions: Record<Order['status'], string> = {
-  pending: 'Pending',
-  paid: 'Paid',
+type RiderStatus = 'shipped' | 'delivered' | 'undelivered';
+
+const statusOptions: Record<RiderStatus, string> = {
   shipped: 'Shipped',
   delivered: 'Delivered',
-  undelivered: 'Undelivered',
-  cancelled: 'Cancelled'
+  undelivered: 'Undelivered'
 };
 
 const RiderOrders: React.FC = () => {
@@ -76,16 +75,9 @@ const RiderOrders: React.FC = () => {
       });
 
       // Try to update the server
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/orders/${orderId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
+      const response = await api.patch(`/orders/${orderId}/delivery-status`, { status: newStatus });
 
-      if (!response.ok) {
+      if (!response.data) {
         // If offline, register for background sync
         if (!navigator.onLine) {
           if ('serviceWorker' in navigator && 'SyncManager' in window) {

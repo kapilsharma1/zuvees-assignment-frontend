@@ -15,6 +15,48 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Add IndexedDB helper function
+const openDB = () => {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open('zuveesDB', 1);
+    
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains('auth')) {
+        db.createObjectStore('auth', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('pendingUpdates')) {
+        db.createObjectStore('pendingUpdates', { keyPath: 'id', autoIncrement: true });
+      }
+    };
+  });
+};
+
+// Helper function to store token in IndexedDB
+const storeTokenInIndexedDB = async (token: string) => {
+  try {
+    const db = await openDB();
+    const store = db.transaction('auth', 'readwrite').objectStore('auth');
+    await store.put({ id: 'token', token });
+  } catch (error) {
+    console.error('Error storing token in IndexedDB:', error);
+  }
+};
+
+// Helper function to remove token from IndexedDB
+const removeTokenFromIndexedDB = async () => {
+  try {
+    const db = await openDB();
+    const store = db.transaction('auth', 'readwrite').objectStore('auth');
+    await store.delete('token');
+  } catch (error) {
+    console.error('Error removing token from IndexedDB:', error);
+  }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
@@ -41,6 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (token) {
       console.log('Setting auth token from localStorage');
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      storeTokenInIndexedDB(token);
     }
 
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
@@ -55,6 +98,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem('authToken', token);
           api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
           
+          // Store token in IndexedDB
+          await storeTokenInIndexedDB(token);
+          
           // Fetch user data from our backend
           console.log('Fetching user data from /auth/me endpoint');
           const response = await api.get('/auth/me');
@@ -68,6 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(null);
           localStorage.removeItem('authToken');
           localStorage.removeItem('userData');
+          await removeTokenFromIndexedDB();
         }
       } else {
         console.log('User signed out of Firebase');
@@ -75,6 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('authToken');
         localStorage.removeItem('userData');
         delete api.defaults.headers.common['Authorization'];
+        await removeTokenFromIndexedDB();
       }
       
       setLoading(false);
